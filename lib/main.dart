@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
@@ -41,16 +42,19 @@ class MapPage extends StatefulWidget {
   _MapPageState createState() => _MapPageState();
 }
 
-class _MapPageState extends State<MapPage> {
+class _MapPageState extends State<MapPage> with SingleTickerProviderStateMixin {
   final _channel = IOWebSocketChannel.connect(
       'wss://smartarea.info/socket.io/?EIO=3&transport=websocket',
       headers: MapPage._headers);
   final _streamController = StreamController<List<VehicleStateModel>>();
+  Position _userPosition;
 
   @override
-  void initState() {
+  void initState() async {
     super.initState();
     _listen();
+    _userPosition = await Geolocator()
+        .getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
   }
 
   @override
@@ -92,71 +96,90 @@ class _MapPageState extends State<MapPage> {
   }
 
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: Geolocator()
-          .getCurrentPosition(desiredAccuracy: LocationAccuracy.high),
-      builder: (BuildContext context, AsyncSnapshot<Position> snapshot) {
+    return StreamBuilder(
+      stream: _streamController.stream,
+      builder: (BuildContext context,
+          AsyncSnapshot<List<VehicleStateModel>> snapshot) {
         if (!snapshot.hasData) return Container();
-        final pos = snapshot.data;
-        return StreamBuilder(
-          stream: _streamController.stream,
-          builder: (BuildContext context,
-              AsyncSnapshot<List<VehicleStateModel>> snapshot) {
-            if (!snapshot.hasData) return Container();
-            final models = snapshot.data;
-            return FlutterMap(
-              options: MapOptions(
-                center: LatLng(pos.latitude, pos.longitude),
-                zoom: 15.0,
+        final models = snapshot.data;
+        return Scaffold(
+          body: FlutterMap(
+            options: MapOptions(
+              center: LatLng(_userPosition.latitude, _userPosition.longitude),
+              zoom: 15.0,
+            ),
+            layers: [
+              TileLayerOptions(
+                urlTemplate:
+                    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                subdomains: ['a', 'b', 'c'],
               ),
-              layers: [
-                TileLayerOptions(
-                  urlTemplate:
-                      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  subdomains: ['a', 'b', 'c'],
-                ),
-                MarkerLayerOptions(
-                  markers: models.map((model) {
-                    String imgPath = 'assets/images/tram.svg';
-                    Color color = Colors.blue;
-                    if (model.type == 2) {
-                      imgPath = 'assets/images/trolleybus.svg';
-                      color = Colors.red;
-                    }
-                    return Marker(
-                      width: 40.0,
-                      height: 40.0,
-                      point: LatLng(model.latitude, model.longitude),
-                      builder: (ctx) => Column(
+              MarkerLayerOptions(
+                markers: models.map((model) {
+                  String imgPath = 'assets/images/tram.svg';
+                  Color color = Colors.blue;
+                  Color colorBack = Colors.yellow;
+                  if (model.type == 2) {
+                    imgPath = 'assets/images/trolleybus.svg';
+                    color = Colors.red;
+                    colorBack = Colors.green;
+                  }
+                  return Marker(
+                    width: 40.0,
+                    height: 40.0,
+                    point: LatLng(model.latitude, model.longitude),
+                    builder: (ctx) => Container(
+                      decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: colorBack.withOpacity(0.5)),
+                      child: Column(
                         children: <Widget>[
-                          Container(
-                            width: 20.0,
-                            height: 20.0,
-                            child: Center(
-                              child: Text(
-                                model.routeNumber,
-                                style: TextStyle(fontSize: 15, color: color),
-                              ),
-                            ),
+                          Text(
+                            model.routeNumber,
+                            style: TextStyle(fontSize: 15, color: color),
                           ),
-                          Container(
-                            width: 20.0,
-                            height: 20.0,
-                            child: Center(
+                          SizedBox(
+                              height: 20.0,
                               child: SvgPicture.asset(
                                 imgPath,
                                 color: color,
-                              ),
-                            ),
-                          ),
+                              ))
                         ],
                       ),
-                    );
-                  }).toList(),
-                ),
-              ],
-            );
-          },
+                    ),
+                  );
+                }).toList()
+                  ..add(Marker(
+                      width: 100.0,
+                      height: 35.0,
+                      point: LatLng(
+                          _userPosition.latitude, _userPosition.longitude),
+                      builder: (ctx) => Column(
+                            children: <Widget>[
+                              SizedBox(
+                                  height: 19.0,
+                                  child: Text(
+                                    'You are here!',
+                                    style: TextStyle(fontSize: 19),
+                                  )),
+                              Container(
+                                height: 15.0,
+                                decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.deepPurpleAccent),
+                              ),
+                            ],
+                          ))),
+              ),
+            ],
+          ),
+          floatingActionButton: FloatingActionButton(
+            child: Icon(Icons.gps_fixed),
+            onPressed: () => setState(() async {
+              _userPosition = await Geolocator()
+                  .getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+            }),
+          ),
         );
       },
     );

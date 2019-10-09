@@ -48,11 +48,27 @@ class _MapPageState extends State<MapPage> with SingleTickerProviderStateMixin {
       headers: MapPage._headers);
   final _streamController = StreamController<List<VehicleStateModel>>();
   final _mapController = MapController();
+  Position _userPosition;
+  AnimationController _animationController;
+  Animation _colorTween;
 
   @override
   void initState() {
     super.initState();
     _listen();
+
+    _animationController = AnimationController(
+        vsync: this, duration: Duration(milliseconds: 1000));
+    _colorTween = ColorTween(begin: Colors.red, end: Colors.green)
+        .animate(_animationController)
+          ..addStatusListener((status) {
+            if (status == AnimationStatus.completed) {
+              _animationController.reverse();
+            } else if (status == AnimationStatus.dismissed) {
+              _animationController.forward();
+            }
+          });
+    _animationController.forward();
   }
 
   @override
@@ -97,8 +113,25 @@ class _MapPageState extends State<MapPage> with SingleTickerProviderStateMixin {
     return FutureBuilder(
       future: Geolocator().getCurrentPosition(),
       builder: (BuildContext context, AsyncSnapshot<Position> snapshot) {
-        if (!snapshot.hasData) return Container();
-        final userPosition = snapshot.data;
+        if (!snapshot.hasData) {
+          return Scaffold(
+            body: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                center: LatLng(49.9935, 36.2304),
+                zoom: 11.0,
+              ),
+              layers: [
+                TileLayerOptions(
+                  urlTemplate:
+                      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  subdomains: ['a', 'b', 'c'],
+                ),
+              ],
+            ),
+          );
+        }
+        _userPosition = snapshot.data;
         return StreamBuilder(
           stream: _streamController.stream,
           builder: (BuildContext context,
@@ -109,7 +142,8 @@ class _MapPageState extends State<MapPage> with SingleTickerProviderStateMixin {
               body: FlutterMap(
                 mapController: _mapController,
                 options: MapOptions(
-                  center: LatLng(userPosition.latitude, userPosition.longitude),
+                  center:
+                      LatLng(_userPosition.latitude, _userPosition.longitude),
                   zoom: 15.0,
                 ),
                 layers: [
@@ -157,22 +191,27 @@ class _MapPageState extends State<MapPage> with SingleTickerProviderStateMixin {
                           width: 100.0,
                           height: 35.0,
                           point: LatLng(
-                              userPosition.latitude, userPosition.longitude),
-                          builder: (ctx) => Column(
-                                children: <Widget>[
-                                  SizedBox(
-                                      height: 19.0,
-                                      child: Text(
-                                        'You are here!',
-                                        style: TextStyle(fontSize: 19),
-                                      )),
-                                  Container(
-                                    height: 15.0,
-                                    decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.deepPurpleAccent),
-                                  ),
-                                ],
+                              _userPosition.latitude, _userPosition.longitude),
+                          builder: (ctx) => AnimatedBuilder(
+                                animation: _colorTween,
+                                builder: (context, child) => Column(
+                                  children: <Widget>[
+                                    SizedBox(
+                                        height: 19.0,
+                                        child: Text(
+                                          'You are here!',
+                                          style: TextStyle(
+                                              fontSize: 19,
+                                              color: _colorTween.value),
+                                        )),
+                                    Container(
+                                      height: 15.0,
+                                      decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: _colorTween.value),
+                                    ),
+                                  ],
+                                ),
                               ))),
                   ),
                 ],
@@ -184,9 +223,9 @@ class _MapPageState extends State<MapPage> with SingleTickerProviderStateMixin {
                   color: Colors.grey,
                 ),
                 onPressed: () {
-                  Geolocator().getCurrentPosition().then((v) {
-                    _mapController.move(LatLng(v.latitude, v.longitude), 15);
-                  });
+                  _mapController.move(
+                      LatLng(_userPosition.latitude, _userPosition.longitude),
+                      15);
                 },
               ),
             );

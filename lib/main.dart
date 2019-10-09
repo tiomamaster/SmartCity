@@ -47,14 +47,12 @@ class _MapPageState extends State<MapPage> with SingleTickerProviderStateMixin {
       'wss://smartarea.info/socket.io/?EIO=3&transport=websocket',
       headers: MapPage._headers);
   final _streamController = StreamController<List<VehicleStateModel>>();
-  Position _userPosition;
+  final _mapController = MapController();
 
   @override
-  void initState() async {
+  void initState() {
     super.initState();
     _listen();
-    _userPosition = await Geolocator()
-        .getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
   }
 
   @override
@@ -96,90 +94,103 @@ class _MapPageState extends State<MapPage> with SingleTickerProviderStateMixin {
   }
 
   Widget build(BuildContext context) {
-    return StreamBuilder(
-      stream: _streamController.stream,
-      builder: (BuildContext context,
-          AsyncSnapshot<List<VehicleStateModel>> snapshot) {
+    return FutureBuilder(
+      future: Geolocator().getCurrentPosition(),
+      builder: (BuildContext context, AsyncSnapshot<Position> snapshot) {
         if (!snapshot.hasData) return Container();
-        final models = snapshot.data;
-        return Scaffold(
-          body: FlutterMap(
-            options: MapOptions(
-              center: LatLng(_userPosition.latitude, _userPosition.longitude),
-              zoom: 15.0,
-            ),
-            layers: [
-              TileLayerOptions(
-                urlTemplate:
-                    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                subdomains: ['a', 'b', 'c'],
-              ),
-              MarkerLayerOptions(
-                markers: models.map((model) {
-                  String imgPath = 'assets/images/tram.svg';
-                  Color color = Colors.blue;
-                  Color colorBack = Colors.yellow;
-                  if (model.type == 2) {
-                    imgPath = 'assets/images/trolleybus.svg';
-                    color = Colors.red;
-                    colorBack = Colors.green;
-                  }
-                  return Marker(
-                    width: 40.0,
-                    height: 40.0,
-                    point: LatLng(model.latitude, model.longitude),
-                    builder: (ctx) => Container(
-                      decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: colorBack.withOpacity(0.5)),
-                      child: Column(
-                        children: <Widget>[
-                          Text(
-                            model.routeNumber,
-                            style: TextStyle(fontSize: 15, color: color),
-                          ),
-                          SizedBox(
-                              height: 20.0,
-                              child: SvgPicture.asset(
-                                imgPath,
-                                color: color,
-                              ))
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList()
-                  ..add(Marker(
-                      width: 100.0,
-                      height: 35.0,
-                      point: LatLng(
-                          _userPosition.latitude, _userPosition.longitude),
-                      builder: (ctx) => Column(
+        final userPosition = snapshot.data;
+        return StreamBuilder(
+          stream: _streamController.stream,
+          builder: (BuildContext context,
+              AsyncSnapshot<List<VehicleStateModel>> snapshot) {
+            if (!snapshot.hasData) return Container();
+            final models = snapshot.data;
+            return Scaffold(
+              body: FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  center: LatLng(userPosition.latitude, userPosition.longitude),
+                  zoom: 15.0,
+                ),
+                layers: [
+                  TileLayerOptions(
+                    urlTemplate:
+                        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    subdomains: ['a', 'b', 'c'],
+                  ),
+                  MarkerLayerOptions(
+                    markers: models.map((model) {
+                      String imgPath = 'assets/images/tram.svg';
+                      Color color = Colors.blue;
+                      Color colorBack = Colors.yellow;
+                      if (model.type == 2) {
+                        imgPath = 'assets/images/trolleybus.svg';
+                        color = Colors.red;
+                        colorBack = Colors.green;
+                      }
+                      return Marker(
+                        width: 40.0,
+                        height: 40.0,
+                        point: LatLng(model.latitude, model.longitude),
+                        builder: (ctx) => Container(
+                          decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colorBack.withOpacity(0.5)),
+                          child: Column(
                             children: <Widget>[
-                              SizedBox(
-                                  height: 19.0,
-                                  child: Text(
-                                    'You are here!',
-                                    style: TextStyle(fontSize: 19),
-                                  )),
-                              Container(
-                                height: 15.0,
-                                decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.deepPurpleAccent),
+                              Text(
+                                model.routeNumber,
+                                style: TextStyle(fontSize: 15, color: color),
                               ),
+                              SizedBox(
+                                  height: 20.0,
+                                  child: SvgPicture.asset(
+                                    imgPath,
+                                    color: color,
+                                  ))
                             ],
-                          ))),
+                          ),
+                        ),
+                      );
+                    }).toList()
+                      ..add(Marker(
+                          width: 100.0,
+                          height: 35.0,
+                          point: LatLng(
+                              userPosition.latitude, userPosition.longitude),
+                          builder: (ctx) => Column(
+                                children: <Widget>[
+                                  SizedBox(
+                                      height: 19.0,
+                                      child: Text(
+                                        'You are here!',
+                                        style: TextStyle(fontSize: 19),
+                                      )),
+                                  Container(
+                                    height: 15.0,
+                                    decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.deepPurpleAccent),
+                                  ),
+                                ],
+                              ))),
+                  ),
+                ],
               ),
-            ],
-          ),
-          floatingActionButton: FloatingActionButton(
-            child: Icon(Icons.gps_fixed),
-            onPressed: () => setState(() async {
-              _userPosition = await Geolocator()
-                  .getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-            }),
-          ),
+              floatingActionButton: FloatingActionButton(
+                backgroundColor: Colors.white,
+                child: Icon(
+                  Icons.gps_fixed,
+                  color: Colors.grey,
+                ),
+                onPressed: () {
+                  Geolocator().getCurrentPosition().then((v) {
+                    _mapController.move(LatLng(v.latitude, v.longitude), 15);
+                  });
+                },
+              ),
+            );
+          },
         );
       },
     );

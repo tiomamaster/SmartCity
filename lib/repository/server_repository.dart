@@ -3,13 +3,14 @@ import 'dart:convert';
 import 'package:rxdart/rxdart.dart';
 import 'package:web_socket_channel/io.dart';
 
+import '../logger_mixin.dart';
 import '../model.dart';
 
 abstract class ServerRepository {
   Observable<List<VehicleStateModel>> get vehicleStates;
 }
 
-class ServerStorage extends ServerRepository {
+class ServerStorage extends ServerRepository with LoggerMixin {
   static const _HEADERS = {
     'Host': 'smartarea.info',
     'Connection': 'Upgrade',
@@ -24,6 +25,7 @@ class ServerStorage extends ServerRepository {
 
   @override
   Observable<List<VehicleStateModel>> get vehicleStates {
+    log.fine('get vehicleStates');
     var eventCounter = 0;
     final socketChannel = IOWebSocketChannel.connect(
         'wss://smartarea.info/socket.io/?EIO=3&transport=websocket',
@@ -39,11 +41,11 @@ class ServerStorage extends ServerRepository {
             socketChannel.sink.add('42["sendltLn"]');
           }
         })
-        .doOnError((error) => print('Socket error: $error'))
-        .doOnDone(
-            () => print('Socket done. Close code: ${socketChannel.closeCode}'))
+        .doOnError((error) => log.fine('Socket error: $error'))
+        .doOnDone(() =>
+            log.fine('Socket done. Close code: ${socketChannel.closeCode}'))
         .where((event) => (event as String).startsWith('42'))
-        .doOnData((event) => print('data event'))
+        .doOnData((event) => log.fine('data event'))
         .map((event) {
           final eventStr = event as String;
           final encoded = eventStr.substring(2, eventStr.length);

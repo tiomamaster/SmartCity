@@ -45,13 +45,6 @@ class _MapPageState extends State<MapPage> with SingleTickerProviderStateMixin {
     _animationController.forward();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-    _bloc.dispose();
-    print('MapPage dispose');
-  }
-
   Widget build(BuildContext context) {
     return BlocProvider<MapBloc>(
       child: FutureBuilder(
